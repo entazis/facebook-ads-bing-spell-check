@@ -1,12 +1,12 @@
 const test = () => {
-  const correctResult = getIssuesAndSuggestionsForAdText('What goes into a great AdWords text ad? How can you write ad text that drives people to click through and convert?');
+  const correctResult = getIssuesAndSuggestionsForAdText('What goes into a great books text? How can you write a text that drives people to click through and convert?');
   if (correctResult !== 'correct!') {
     throw Error('Failed test with correct case.');
   }
 
-  const mispelledResult = getIssuesAndSuggestionsForAdText('What goes into a great AdWords text ad? Howcan you write ad text that drives people to click through and convert?');
-  if (mispelledResult !== 'correct!' && mispelledResult !== 'error') {
-    throw Error('Failed test with correct case.');
+  const mispelledResult = getIssuesAndSuggestionsForAdText('What goes into a great books text? Howcan you write a text that drives people to click through and convert?');
+  if (mispelledResult === 'correct!' && mispelledResult === 'error') {
+    throw Error('Failed test with mispelled case.');
   }
 };
 
