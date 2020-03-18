@@ -38,24 +38,20 @@ const getIssuesAndSuggestionsForAdText = (adText) => {
   }
 };
 
-class BingSpellChecker {
-  config = {};
-  BASE_URL = 'https://api.cognitive.microsoft.com/bing/v7.0/spellcheck';
-  CACHE_FILE_NAME = 'spellcheck_cache.json';
-  key = config.key;
-  toIgnore = config.toIgnore;
-  cache = null;
-  previousText = null;
-  previousResult = null;
-  delay = (config.delay) ? config.delay : 60000/7;
-  timeOfLastCall = null;
-  hitQuota = false;
+function BingSpellChecker(config) {
+  this.BASE_URL = 'https://api.cognitive.microsoft.com/bing/v7.0/spellcheck';
+  this.CACHE_FILE_NAME = 'spellcheck_cache.json';
+  this.key = config.key;
+  this.toIgnore = config.toIgnore;
+  this.cache = null;
+  this.previousText = null;
+  this.previousResult = null;
+  this.delay = (config.delay) ? config.delay : 60000/7;
+  this.timeOfLastCall = null;
+  this.hitQuota = false;
 
-  constructor(configP) {
-    this.config = configP;
-    if (this.config.enableCache) {
-      this.loadCache();
-    }
+  if (config.enableCache) {
+    this.loadCache();
   }
 
   // Given a set of options, this function calls the API to check the spelling
@@ -63,7 +59,7 @@ class BingSpellChecker {
   //   options.text : the text to check
   //   options.mode : the mode to use, defaults to 'proof'
   // returns a list of misspelled words, or empty list if everything is good.
-  checkSpelling = (options) => {
+  this.checkSpelling = (options) => {
     if(this.toIgnore) {
       options.text = options.text.replace(new RegExp(this.toIgnore.join('|'),'gi'), '');
     }
@@ -138,7 +134,7 @@ class BingSpellChecker {
   // Returns the spelling issues if there are spelling mistakes in the text toCheck
   // toCheck : the phrase to spellcheck
   // returns array of objects if there are words misspelled, empty array otherwise.
-  getSpellingIssues = (toCheck) => {
+  this.getSpellingIssues = (toCheck) => {
     const issues = this.checkSpelling({ text : toCheck });
     if (issues.length > 0) {
       Logger.log('Checked text: %s \n Issues found: %s', toCheck, JSON.stringify(issues));
@@ -148,7 +144,7 @@ class BingSpellChecker {
 
   // Loads the list of misspelled words from Google Drive.
   // set config.enableCache to true to enable.
-  loadCache = () => {
+  this.loadCache = () => {
     const fileIter = DriveApp.getFilesByName(this.CACHE_FILE_NAME);
     if(fileIter.hasNext()) {
       this.cache = JSON.parse(fileIter.next().getBlob().getDataAsString());
@@ -158,7 +154,7 @@ class BingSpellChecker {
   };
 
   // Called when you are finished with everything to store the data back to Google Drive
-  saveCache = () => {
+  this.saveCache = () => {
     const fileIter = DriveApp.getFilesByName(this.CACHE_FILE_NAME);
     if(fileIter.hasNext()) {
       fileIter.next().setContent(JSON.stringify(this.cache));
