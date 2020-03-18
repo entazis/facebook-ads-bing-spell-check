@@ -1,103 +1,42 @@
-var CHECKED_LABEL_NAME = "Spellchecked";
-var ISSUE_LABEL_NAME = "Spelling Issue";
-
-function main() {
-  var bing = new BingSpellChecker({
-    key : '',
-    toIgnore : ['adwords','adgroup','russ'],
-    enableCache : false
-  });
-  //Optional parameters for filtering account names.
-  //Leave blank to use filters. The matching is case insensitive.
-  var excludeAccountNameContains = "- OLD"; //Select which accounts to exclude. Leave blank to not exclude any accounts.
-  var includeAccountNameContains = ""; //Select which accounts to include. Leave blank to include all accounts.
-
-  var emailAddressesForSendingReportTo = [''];
-
-  var sheet = openSpreadsheetAndGetSheet('', 'Spelling Issues');
-  Logger.log("Using sheet: %s", sheet.getName());
-
-  var accountIter = MccApp.accounts()
-    .withCondition('Name DOES_NOT_CONTAIN_IGNORE_CASE "' + excludeAccountNameContains + '"')
-    .withCondition('Name CONTAINS_IGNORE_CASE "' + includeAccountNameContains + '"')
-    .get();
-  while(accountIter.hasNext()) {
-    MccApp.select(accountIter.next());
-    checkAds(bing);
-    if(bing.hitQuota) {
-      break;
-    }
+const test = () => {
+  const correctResult = getIssuesAndSuggestionsForAdText('What goes into a great AdWords text ad? How can you write ad text that drives people to click through and convert?');
+  if (correctResult !== 'correct!') {
+    throw Error('Failed test with correct case.');
   }
 
-  sendSpellCheckReportEmail(emailAddressesForSendingReportTo);
+  const mispelledResult = getIssuesAndSuggestionsForAdText('What goes into a great AdWords text ad? Howcan you write ad text that drives people to click through and convert?');
+  if (mispelledResult !== 'correct!' && mispelledResult !== 'error') {
+    throw Error('Failed test with correct case.');
+  }
+};
 
-  bing.saveCache();
-}
+const getIssuesAndSuggestionsForAdText = (adText) => {
+  try {
+    const bing = new BingSpellChecker({
+      key : '',
+      toIgnore : [],
+      enableCache : false
+    });
 
-function checkAds(bing) {
-  createLabelIfNeeded(CHECKED_LABEL_NAME,'Indicates an entity was spell checked','#00ff00' /*green*/);
-  createLabelIfNeeded(ISSUE_LABEL_NAME,'Indicates an entity has a spelling issue','#ff0000' /*red*/);
+    const issues = bing.getSpellingIssues(adText);
+    bing.saveCache();
 
-  var adIter = AdWordsApp.ads()
-    .withCondition("Status = ENABLED")
-    .withCondition(Utilities.formatString("LabelNames CONTAINS_NONE ['%s','%s']",
-      CHECKED_LABEL_NAME,
-      ISSUE_LABEL_NAME))
-    .get();
-  while(adIter.hasNext() && !bing.hitQuota) {
-    var ad = adIter.next();
-    var textToCheck = "";
-    if (ad.getType() === "EXPANDED_TEXT_AD") {
-      var expandedTextAd = ad.asType().expandedTextAd();
-      textToCheck = [
-        expandedTextAd.getHeadlinePart1(),
-        expandedTextAd.getHeadlinePart2(),
-        expandedTextAd.getDescription()
-      ].join(' ');
-    } else {
-      textToCheck = [
-        ad.getHeadline(),
-        ad.getDescription1(),
-        ad.getDescription2()
-      ].join(' ');
-    }
-    try {
-      var issues = bing.getSpellingIssues(textToCheck);
-      if(issues.length > 0) {
-        ad.applyLabel(ISSUE_LABEL_NAME);
-        var missSpellings = [];
-        var suggestions = [];
-
-        for (var i = 0; i < issues.length; i++) {
-          missSpellings.push(issues[i].token);
-          suggestions.push(issues[i].suggestions[0]["suggestion"]);
-        }
-
-        appendARow(AdWordsApp.currentAccount().getName(), ad.getCampaign().getName(), ad.getAdGroup().getName(), ad.getId(), missSpellings.join('\n'), suggestions.join('\n'));
-      } else {
-        ad.applyLabel(CHECKED_LABEL_NAME);
+    if (issues.length > 0) {
+      const issueAndFirstSuggestions = [];
+      for (const issue of issues) {
+        issueAndFirstSuggestions.push(issue.token + ' :: ' + issue.suggestions[0]["suggestion"]);
       }
-    } catch(e) {
-      // This probably means you're out of quota.
-      // You can pick up from here next time.
-      Logger.log('INFO: '+e);
-      break;
-    }
-    if(!AdWordsApp.getExecutionInfo().isPreview() &&
-      AdWordsApp.getExecutionInfo().getRemainingTime() < 60) {
-      // Out of time
-      Logger.log("INFO: Ran out of time. Will continue next run.");
-      break;
-    }
-  }
-}
 
-//This is a helper function to create the label if it does not already exist
-function createLabelIfNeeded(name,description,color) {
-  if(!AdWordsApp.labels().withCondition("Name = '"+name+"'").get().hasNext()) {
-    AdWordsApp.createLabel(name,description,color);
+      return issueAndFirstSuggestions.join('\n');
+    }
+
+    return 'correct!';
+  } catch(e) {
+    Logger.log('INFO: '+e);
+
+    return 'error';
   }
-}
+};
 
 /******************************************
  * Bing Spellchecker API v1.0
@@ -234,38 +173,4 @@ function BingSpellChecker(config) {
       DriveApp.createFile(this.CACHE_FILE_NAME, JSON.stringify(this.cache));
     }
   }
-}
-
-function openSpreadsheetAndGetSheet(url, sheetName) {
-  var ss = SpreadsheetApp.openByUrl(url);
-  return ss.getSheetByName(sheetName);
-}
-
-function appendARow(accountName, campaignName, adGroupName, adId, issues, suggestions) {
-  var sheet = openSpreadsheetAndGetSheet('', 'Spelling Issues');
-  sheet.appendRow([accountName, campaignName, adGroupName, adId, issues, suggestions]);
-}
-
-function sendSpellCheckReportEmail(emails) {
-  var sheet = openSpreadsheetAndGetSheet('', 'Spelling Issues');
-  var uniqueIssuesCnt = countDistinctValues(sheet.getSheetValues(2, 5, sheet.getLastRow(), 1));
-
-  for (var i = 0; i < emails.length; i++) {
-    MailApp.sendEmail(emails[i],
-      'Bing Spell Checker - report',
-      Utilities.formatString('Spell check was successful!\n\nSpelling issues were logged here: https://docs.google.com/spreadsheets/d/1r3B_sZhPySjd1GRnIooeRSmj8Bg6TJ5SDN0J0XwW_uE/\nNumber of unique issues: %s', uniqueIssuesCnt));
-  }
-}
-
-function countDistinctValues(values) {
-  values = values.filter(function(value) {
-    return !(JSON.stringify(value) === '[""]');
-  });
-
-  var counts = {};
-  for (var i = 0; i < values.length; i++) {
-    counts[values[i]] = 1 + (counts[values[i]] || 0);
-  }
-
-  return Object.keys(counts).length;
 }
