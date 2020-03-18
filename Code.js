@@ -14,12 +14,10 @@ const getIssuesAndSuggestionsForAdText = (adText) => {
   try {
     const bing = new BingSpellChecker({
       key : 'f73d4ac33bbd441491a096c8eec150a5',
-      toIgnore : [],
-      enableCache : false
+      toIgnore : []
     });
 
     const issues = bing.getSpellingIssues(adText);
-    bing.saveCache();
 
     if (issues.length > 0) {
       const issueAndFirstSuggestions = [];
@@ -34,25 +32,19 @@ const getIssuesAndSuggestionsForAdText = (adText) => {
   } catch(e) {
     Logger.log('INFO: '+e);
 
-    return 'error';
+    return 'error: ' + e;
   }
 };
 
 function BingSpellChecker(config) {
   this.BASE_URL = 'https://api.cognitive.microsoft.com/bing/v7.0/spellcheck';
-  this.CACHE_FILE_NAME = 'spellcheck_cache.json';
   this.key = config.key;
   this.toIgnore = config.toIgnore;
-  this.cache = null;
   this.previousText = null;
   this.previousResult = null;
   this.delay = (config.delay) ? config.delay : 60000/7;
   this.timeOfLastCall = null;
   this.hitQuota = false;
-
-  if (config.enableCache) {
-    this.loadCache();
-  }
 
   // Given a set of options, this function calls the API to check the spelling
   // options:
@@ -70,16 +62,6 @@ function BingSpellChecker(config) {
       if(options.text === this.previousText) {
         //Logger.log('INFO: Using previous response.');
         return this.previousResult;
-      }
-      if(this.cache) {
-        const words = options.text.split(/ +/);
-        for(const i in words) {
-          //Logger.log('INFO: checking cache: '+words[i]);
-          if(this.cache && this.cache.incorrect[words[i]]) {
-            //Logger.log('INFO: Using cached response.');
-            return [{"offset":1,"token":words[i],"type":"cacheHit","suggestions":[]}];
-          }
-        }
       }
 
       let url = this.BASE_URL;
@@ -119,11 +101,6 @@ function BingSpellChecker(config) {
         const jsonResp = JSON.parse(resp.getContentText());
         this.previousText = options.text;
         this.previousResult = jsonResp.flaggedTokens;
-        for(const i in jsonResp.flaggedTokens) {
-          if (this.cache) {
-            this.cache.incorrect[jsonResp.flaggedTokens[i].token] = true;
-          }
-        }
         return jsonResp.flaggedTokens;
       }
     } else {
@@ -140,26 +117,5 @@ function BingSpellChecker(config) {
       Logger.log('Checked text: %s \n Issues found: %s', toCheck, JSON.stringify(issues));
     }
     return issues;
-  };
-
-  // Loads the list of misspelled words from Google Drive.
-  // set config.enableCache to true to enable.
-  this.loadCache = () => {
-    const fileIter = DriveApp.getFilesByName(this.CACHE_FILE_NAME);
-    if(fileIter.hasNext()) {
-      this.cache = JSON.parse(fileIter.next().getBlob().getDataAsString());
-    } else {
-      this.cache = { incorrect : {} };
-    }
-  };
-
-  // Called when you are finished with everything to store the data back to Google Drive
-  this.saveCache = () => {
-    const fileIter = DriveApp.getFilesByName(this.CACHE_FILE_NAME);
-    if(fileIter.hasNext()) {
-      fileIter.next().setContent(JSON.stringify(this.cache));
-    } else {
-      DriveApp.createFile(this.CACHE_FILE_NAME, JSON.stringify(this.cache));
-    }
   };
 }
